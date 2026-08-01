@@ -5,7 +5,12 @@ This is an EAP-AKA protocol and TACACS+ server
 
 A TACACS+ daemon (`tacacsd`) implementing RFC 8907 is under `src/`:
 authentication (ASCII login), authorization, and accounting, over a
-forking TCP server. EAP-AKA is not implemented yet.
+forking TCP server.
+
+EAP-AKA' work has started: generic EAP packet framing and the
+Type/Length/Value attribute container it shares with EAP-SIM/AKA are
+implemented. The EAP-AKA' method itself (subtypes, specific attributes,
+and key derivation) is not implemented yet — see `CLAUDE.md` for why.
 
 ## Building and running
 

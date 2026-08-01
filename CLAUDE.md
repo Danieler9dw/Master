@@ -9,7 +9,14 @@ Per the README, the intended purpose of this repository is:
 > An EAP-AKA protocol and TACACS+ server
 
 A TACACS+ daemon (RFC 8907) exists under `src/`, covering authentication,
-authorization, and accounting. EAP-AKA is not implemented yet.
+authorization, and accounting.
+
+EAP-AKA' work has started: generic EAP packet framing (RFC 3748) and the
+Type/Length/Value attribute container shared by EAP-SIM/AKA/AKA' are
+implemented. The EAP-AKA' method itself (subtype dispatch, the specific
+AT_* attribute type numbers, AUTN/RES validation, and the RFC 9048 key
+derivation) is **not** implemented yet — see "EAP-AKA' status" below
+before adding to it.
 
 ## Build, lint, test, run
 
@@ -17,7 +24,7 @@ Plain C11 + POSIX (sockets, fork), no external dependencies, no package manager.
 
 ```sh
 make            # builds bin/tacacsd from src/*.c into build/*.o
-make test       # builds and runs tests/test_md5 and tests/test_packet
+make test       # builds and runs every tests/test_*.c binary
 make clean      # removes build/ and bin/
 ```
 
@@ -30,6 +37,8 @@ prints `FAIL: ...` lines on failure):
 ```sh
 make bin/test_md5 && ./bin/test_md5
 make bin/test_packet && ./bin/test_packet
+make bin/test_eap && ./bin/test_eap
+make bin/test_eap_attr && ./bin/test_eap_attr
 ```
 
 To run the server against a local client, copy `tacacs.conf.example` to
@@ -74,4 +83,47 @@ turn decoupled from connection/process handling:
 
 Nothing here implements PAP/CHAP authentication, single-connect mode, or
 persistent accounting storage — those would be the natural next additions
-if the TACACS+ side needs to grow further before EAP-AKA work begins.
+if the TACACS+ side needs to grow further.
+
+EAP-AKA' pieces so far, deliberately generic (no EAP-AKA'-specific numbers
+baked in yet):
+
+- `src/eap.c` / `eap.h` — EAP packet framing per RFC 3748 §4: the
+  Code/Identifier/Length/Type header plus Request/Response/Success/Failure
+  encode/decode helpers. Transport- and method-agnostic.
+- `src/eap_attr.c` / `eap_attr.h` — the Type/Length/Value attribute
+  container shared by EAP-SIM (RFC 4186 §8.1), EAP-AKA, and EAP-AKA': an
+  iterator for decoding a packed attribute list and an append helper for
+  encoding one, including the length-in-4-byte-words framing and zero
+  padding. Only knows the generic container and the skippable-if-type>=128
+  convention — no specific attribute type numbers (AT_RAND, AT_MAC, etc.).
+
+## EAP-AKA' status
+
+This environment's network policy blocks outbound access to
+`rfc-editor.org`/`ietf.org` (proxy returns 403), so the RFC 9048 text
+could not be fetched to verify byte-level details while implementing
+this. Rather than guess at security-critical constants from memory, the
+following were deliberately left out of `src/eap.c`/`src/eap_attr.c` and
+still need to be added, ideally cross-checked against the actual RFC text
+(RFC 9048, plus RFC 4187 for base EAP-AKA and RFC 4186 §8.1 for the
+attribute format it reuses) rather than recollection:
+
+- The EAP-AKA' subtype values (Challenge, Authentication-Reject,
+  Synchronization-Failure, Identity, Notification, Reauthentication,
+  Client-Error) and the subtype dispatch/state machine built on top of
+  `eap.h`.
+- The specific attribute type numbers (AT_RAND, AT_AUTN, AT_RES, AT_AUTS,
+  AT_MAC, AT_KDF, AT_KDF_INPUT, AT_CHECKCODE, ...) and each one's internal
+  sub-fields, built on top of `eap_attr.h`.
+- The AT_MAC computation (HMAC-SHA-256 truncated to 128 bits over the EAP
+  packet with the MAC field zeroed) and verification.
+- The CK'/IK' derivation from CK/IK and the access network identity, and
+  the PRF'-based derivation of MK, K_encr, K_aut, K_re, MSK, and EMSK.
+- The pluggable AKA algorithm interface (computing AUTN/RES/CK/IK/AK, and
+  AUTS for resynchronization, from a subscriber key + RAND + SQN + AMF)
+  and a placeholder/test-vector implementation — real Milenage (3GPP TS
+  35.206) is out of scope for now.
+
+If you have network access to fetch the RFC text, or the user provides
+it, verify against that directly instead of continuing from memory.
