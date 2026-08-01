@@ -1,0 +1,7 @@
+# Example tacacsd config. Copy to tacacs.conf and edit.
+
+key = testing123
+port = 49
+
+user alice hunter2
+user bob supersecret
